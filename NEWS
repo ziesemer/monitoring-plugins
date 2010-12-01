@@ -1,5 +1,10 @@
 This file documents the major additions and syntax changes between releases.
 
+ ...
+
+	FIXES
+	Make check_snmp work more like v1.4.14 with regard to using special values (Timeticks, STRING) as numeric thresholds.
+
 1.4.15 27th July 2010
 	ENHANCEMENTS
 	New check_ntp_peer -m and -n options to check the number of usable time sources ("truechimers")

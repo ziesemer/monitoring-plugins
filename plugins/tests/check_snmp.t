@@ -51,7 +51,10 @@ if ($ARGV[0] && $ARGV[0] eq "-d") {
 	}
 }
 
-my $tests = 33;
+# We should merge that with $ENV{'NPTEST_CACHE'}, use one dir for all test data
+$ENV{'NAGIOS_PLUGIN_STATE_DIRECTORY'} ||= "/var/tmp";
+
+my $tests = 39;
 if (-x "./check_snmp") {
 	plan tests => $tests;
 } else {
@@ -106,7 +109,7 @@ like($res->output, '/'.quotemeta('SNMP OK - And now have fun with with this: \"C
 "And now have fun with with this: \"C:\\\\\"
 because we\'re not done yet!"').'/m', "Attempt to confuse parser No.3");
 
-system("rm /usr/local/nagios/var/check_snmp/*");
+system("rm -f ".$ENV{'NAGIOS_PLUGIN_STATE_DIRECTORY'}."/check_snmp/*");
 $res = NPTest->testCmd( "./check_snmp -H 127.0.0.1 -C public -p $port_snmp -o .1.3.6.1.4.1.8072.3.2.67.10 --rate -w 600" );
 is($res->return_code, 0, "Returns OK");
 is($res->output, "No previous data to calculate rate - assume okay");
@@ -170,5 +173,16 @@ $res = NPTest->testCmd( "./check_snmp -H 127.0.0.1 -C public -p $port_snmp -o .1
 is($res->return_code, 0, "OK as string doesn't match but inverted" );
 is($res->output, 'SNMP OK - "stringtests" | ', "OK as inverted string no match" );
 
+$res = NPTest->testCmd( "./check_snmp -H 127.0.0.1 -C public -p $port_snmp -o .1.3.6.1.4.1.8072.3.2.67.12 -w 4:5" );
+is($res->return_code, 1, "Numeric in string test" );
+is($res->output, 'SNMP WARNING - *3.5* | iso.3.6.1.4.1.8072.3.2.67.12=3.5 ', "WARNING threshold checks for string masquerading as number" );
+
+$res = NPTest->testCmd( "./check_snmp -H 127.0.0.1 -C public -p $port_snmp -o .1.3.6.1.4.1.8072.3.2.67.13" );
+is($res->return_code, 0, "Not really numeric test" );
+is($res->output, 'SNMP OK - "87.4startswithnumberbutshouldbestring" | ', "Check string with numeric start is still string" );
+
+$res = NPTest->testCmd( "./check_snmp -H 127.0.0.1 -C public -p $port_snmp -o .1.3.6.1.4.1.8072.3.2.67.14" );
+is($res->return_code, 0, "Not really numeric test (trying best to fool it)" );
+is($res->output, 'SNMP OK - "555\"I said\"" | ', "Check string with a double quote following is still a string (looks like the perl routine will always escape though)" );
 
 
