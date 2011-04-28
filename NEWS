@@ -4,6 +4,7 @@ This file documents the major additions and syntax changes between releases.
 
 	FIXES
 	Make check_snmp work more like v1.4.14 with regard to using special values (Timeticks, STRING) as numeric thresholds.
+	Fix segfault in check_host when hostname returns multiple IP addresses (Sebastian Harl)
 
 1.4.15 27th July 2010
 	ENHANCEMENTS
