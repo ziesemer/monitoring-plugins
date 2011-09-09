@@ -951,6 +951,10 @@ check_http (void)
   }
   page += (size_t) strspn (page, "\r\n");
   header[pos - header] = 0;
+
+  /* Decode chunked encoding if needed */
+  /* TODO: write chunked_decode() */
+
   if (verbose)
     printf ("**** HEADER ****\n%s\n**** CONTENT ****\n%s\n", header,
                 (no_body ? "  [[ skipped ]]" : page));
@@ -1110,8 +1114,82 @@ check_http (void)
 #define HD4 URI_HTTP "://" URI_HOST
 #define HD5 URI_PATH
 
+#define GOBBLE_HEADER(x) while (strlen(x) >= 1 && x[0] != '\r' && x[1] != '\n') { x++; } x+=2;
+#define LENGTH_EOL(x, i) i=0; while (strlen(x+i) >= 1 && x[i] != '\r' && x[i+1] != '\n') { i++; }
+#define CHECK_LWS(x) x[0] == ' ' || x[0] == '\t'
+
+/* Get named header (won't merge repeatable headers) */
+char *
+header_get_single(const char *header, const char *key)
+{
+  char *c, *tmp, *value;
+  char *x=(char *)header;
+  int i;
+
+  while (x) {
+    /* compare line with key */
+    for (c=(char *)key; strlen(c); c++, x++) {
+      if (tolower(c[0]) == tolower(c[0])) continue;
+      break;
+    }
+    if (c[0] == '\0' && x[0] == ':') {
+      x++;
+      /* Match, strip heading spaces */
+      while (CHECK_LWS(x)) x++;
+      /* Get the rest... */
+      LENGTH_EOL(x, i)
+      /* strip trailing spaces */
+      while (CHECK_LWS((x+i-1))) i--;
+      value = strndup(x, i);
+      /* Get to next line */
+      x += i+2;
+      /* RFC 2616 (4.2):  ``Header fields can be extended over multiple lines by
+       * preceding each extra line with at least one SP or HT.'' */
+      while (x && CHECK_LWS(x)) {
+        /* again: strip, copy, strip */
+        while (CHECK_LWS(x)) x++;
+        tmp = value;
+        LENGTH_EOL(x, i)
+        while (CHECK_LWS((x+i-1))) i--;
+        c = strndup(x, i);
+        asprintf(&value, "%s %s", value, c); //FIXME: check ret
+        free(tmp);
+        free(c);
+        /* Get to next line; lather, rinse, repeat */
+        x += i+2;
+      }
+      return value;
+    } else {
+      /* No match, walk to next header */
+      GOBBLE_HEADER(x)
+      while (x && CHECK_LWS(x)) {
+        /* extended headers... */
+        GOBBLE_HEADER(x)
+      }
+    }
+
+
+  //int len=strlen(key);
+    //if (strncasecmp(x, key, len) == 0 && x[len] == ':') {
+    //  /* We've got a winner */
+    //  x += len+1;
+    //  /* strip heading */
+    //  x += strspn(x, "\t ");
+    //  value = strndup(x, strcspn(x, "\r\n"));
+    //  /* Strip end */
+    //  for (c=value[strlen(x)]);
+    //}
+    /* FIXME, multiple headers? */
+    //GOBBLE_HEADER(x);
+  }
+
+  return NULL;
+
+}
+
+/* FIXME: Make a function to check for Content-encoding */
 void
-redir (char *pos, char *status_line)
+redir (char *p, char *status_line)
 {
   int i = 0;
   char *x;
@@ -1119,94 +1197,63 @@ redir (char *pos, char *status_line)
   char type[6];
   char *addr;
   char *url;
+  char *pos;
 
   addr = malloc (MAX_IPV4_HOSTLENGTH + 1);
   if (addr == NULL)
     die (STATE_UNKNOWN, _("HTTP UNKNOWN - Could not allocate addr\n"));
 
-  url = malloc (strcspn (pos, "\r\n"));
+  url = header_get_single(p, "Location");
+  /* hack... a very ugly one */
+  asprintf(&pos, "%s\r\n", url);
+
   if (url == NULL)
     die (STATE_UNKNOWN, _("HTTP UNKNOWN - Could not allocate URL\n"));
 
-  while (pos) {
-    sscanf (pos, "%1[Ll]%*1[Oo]%*1[Cc]%*1[Aa]%*1[Tt]%*1[Ii]%*1[Oo]%*1[Nn]:%n", xx, &i);
-    if (i == 0) {
-      pos += (size_t) strcspn (pos, "\r\n");
-      pos += (size_t) strspn (pos, "\r\n");
-      if (strlen(pos) == 0)
-        die (STATE_UNKNOWN,
-             _("HTTP UNKNOWN - Could not find redirect location - %s%s\n"),
-             status_line, (display_html ? "</A>" : ""));
-      continue;
+  /* URI_HTTP, URI_HOST, URI_PORT, URI_PATH */
+  if (sscanf (pos, HD1, type, addr, &i, url) == 4) {
+    url = prepend_slash (url);
+    use_ssl = server_type_check (type);
+  }
+
+  /* URI_HTTP URI_HOST URI_PATH */
+  else if (sscanf (pos, HD2, type, addr, url) == 3 ) {
+    url = prepend_slash (url);
+    use_ssl = server_type_check (type);
+    i = server_port_check (use_ssl);
+  }
+
+  /* URI_HTTP URI_HOST URI_PORT */
+  else if (sscanf (pos, HD3, type, addr, &i) == 3) {
+    strcpy (url, HTTP_URL);
+    use_ssl = server_type_check (type);
+  }
+
+  /* URI_HTTP URI_HOST */
+  else if (sscanf (pos, HD4, type, addr) == 2) {
+    strcpy (url, HTTP_URL);
+    use_ssl = server_type_check (type);
+    i = server_port_check (use_ssl);
+  }
+
+  /* URI_PATH */
+  else if (sscanf (pos, HD5, url) == 1) {
+    /* relative url */
+    if ((url[0] != '/')) {
+      if ((x = strrchr(server_url, '/')))
+        *x = '\0';
+      asprintf (&url, "%s/%s", server_url, url);
     }
+    i = server_port;
+    strcpy (type, server_type);
+    strcpy (addr, host_name ? host_name : server_address);
+  }
 
-    pos += i;
-    pos += strspn (pos, " \t");
-
-    /*
-     * RFC 2616 (4.2):  ``Header fields can be extended over multiple lines by
-     * preceding each extra line with at least one SP or HT.''
-     */
-    for (; (i = strspn (pos, "\r\n")); pos += i) {
-      pos += i;
-      if (!(i = strspn (pos, " \t"))) {
-        die (STATE_UNKNOWN, _("HTTP UNKNOWN - Empty redirect location%s\n"),
-             display_html ? "</A>" : "");
-      }
-    }
-
-    url = realloc (url, strcspn (pos, "\r\n") + 1);
-    if (url == NULL)
-      die (STATE_UNKNOWN, _("HTTP UNKNOWN - Could not allocate URL\n"));
-
-    /* URI_HTTP, URI_HOST, URI_PORT, URI_PATH */
-    if (sscanf (pos, HD1, type, addr, &i, url) == 4) {
-      url = prepend_slash (url);
-      use_ssl = server_type_check (type);
-    }
-
-    /* URI_HTTP URI_HOST URI_PATH */
-    else if (sscanf (pos, HD2, type, addr, url) == 3 ) {
-      url = prepend_slash (url);
-      use_ssl = server_type_check (type);
-      i = server_port_check (use_ssl);
-    }
-
-    /* URI_HTTP URI_HOST URI_PORT */
-    else if (sscanf (pos, HD3, type, addr, &i) == 3) {
-      strcpy (url, HTTP_URL);
-      use_ssl = server_type_check (type);
-    }
-
-    /* URI_HTTP URI_HOST */
-    else if (sscanf (pos, HD4, type, addr) == 2) {
-      strcpy (url, HTTP_URL);
-      use_ssl = server_type_check (type);
-      i = server_port_check (use_ssl);
-    }
-
-    /* URI_PATH */
-    else if (sscanf (pos, HD5, url) == 1) {
-      /* relative url */
-      if ((url[0] != '/')) {
-        if ((x = strrchr(server_url, '/')))
-          *x = '\0';
-        asprintf (&url, "%s/%s", server_url, url);
-      }
-      i = server_port;
-      strcpy (type, server_type);
-      strcpy (addr, host_name ? host_name : server_address);
-    }
-
-    else {
-      die (STATE_UNKNOWN,
-           _("HTTP UNKNOWN - Could not parse redirect location - %s%s\n"),
-           pos, (display_html ? "</A>" : ""));
-    }
-
-    break;
-
-  } /* end while (pos) */
+  else {
+    die (STATE_UNKNOWN,
+         _("HTTP UNKNOWN - Could not parse redirect location - %s%s\n"),
+         pos, (display_html ? "</A>" : ""));
+  }
 
   if (++redir_depth > max_depth)
     die (STATE_WARNING,
