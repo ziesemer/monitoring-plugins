@@ -55,6 +55,7 @@ void print_help (void);
 
 int display_html = FALSE;
 int show_resolution = FALSE;
+int ignore_duplicates = FALSE;
 int wpl = UNKNOWN_PACKET_LOSS;
 int cpl = UNKNOWN_PACKET_LOSS;
 float wrta = UNKNOWN_TRIP_TIME;
@@ -204,6 +205,7 @@ process_arguments (int argc, char **argv)
 		STD_LONG_OPTS,
 		{"packets", required_argument, 0, 'p'},
 		{"show-resolution", no_argument, 0, 's'},
+		{"ignore-duplicates", no_argument, &ignore_duplicates, TRUE},
 		{"nohtml", no_argument, 0, 'n'},
 		{"link", no_argument, 0, 'L'},
 		{"use-ipv4", no_argument, 0, '4'},
@@ -558,13 +560,15 @@ error_scan (char buf[MAX_INPUT_BUFFER], const char *addr)
 	else if (strstr (buf, "Destination unreachable: "))
 		die (STATE_CRITICAL, _("CRITICAL - Destination Unreachable (%s)\n"), addr);
 
-	if (strstr (buf, "(DUP!)") || strstr (buf, "DUPLICATES FOUND")) {
-		if (warn_text == NULL)
-			warn_text = strdup (_(WARN_DUPLICATES));
-		else if (! strstr (warn_text, _(WARN_DUPLICATES)) &&
-				xasprintf (&warn_text, "%s %s", warn_text, _(WARN_DUPLICATES)) == -1)
-			die (STATE_UNKNOWN, _("Unable to realloc warn_text\n"));
-		return (STATE_WARNING);
+	if (ignore_duplicates == FALSE) {
+		if (strstr (buf, "(DUP!)") || strstr (buf, "DUPLICATES FOUND")) {
+			if (warn_text == NULL)
+				warn_text = strdup (_(WARN_DUPLICATES));
+			else if (! strstr (warn_text, _(WARN_DUPLICATES)) &&
+					xasprintf (&warn_text, "%s %s", warn_text, _(WARN_DUPLICATES)) == -1)
+				die (STATE_UNKNOWN, _("Unable to realloc warn_text\n"));
+			return (STATE_WARNING);
+		}
 	}
 
 	return (STATE_OK);
@@ -600,8 +604,10 @@ print_help (void)
 	printf (" %s\n", "-p, --packets=INTEGER");
 	printf ("    %s ", _("number of ICMP ECHO packets to send"));
 	printf (_("(Default: %d)\n"), DEFAULT_MAX_PACKETS);
-		printf (" %s\n", "-s, --show-resolution");
-	printf ("    %s\n", _("show name resolution in the plugin output (DNS & IP)"));
+	printf (" %s\n", "-s, --show-resolution");
+	printf ("    %s\n", _("Show name resolution in the plugin output (DNS & IP)."));
+	printf (" %s\n", "--ignore-duplicates");
+	printf ("    %s\n", _("Don't check for duplicate ping responses in ping output."));
 	printf (" %s\n", "-L, --link");
 	printf ("    %s\n", _("show HTML in the plugin output (obsoleted by urlize)"));
 
