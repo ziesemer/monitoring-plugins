@@ -172,7 +172,7 @@ main (int argc, char **argv)
 	}
 	else if (!strncmp(SERVICE, "JABBER", 6)) {
 		SEND = "<stream:stream to=\'host\' xmlns=\'jabber:client\' xmlns:stream=\'http://etherx.jabber.org/streams\'>\n";
-		EXPECT = "<?xml version=\'1.0\'?><stream:stream xmlns=\'jabber:client\' xmlns:stream=\'http://etherx.jabber.org/streams\'";
+		EXPECT = "<?xml version=\'1.0\'";
 		QUIT = "</stream:stream>\n";
 		flags |= FLAG_HIDE_OUTPUT;
 		PORT = 5222;
@@ -577,7 +577,8 @@ process_arguments (int argc, char **argv)
 			if ((temp=strchr(optarg,','))!=NULL) {
 			    *temp='\0';
 			    if (!is_intnonneg (optarg))
-                               usage2 (_("Invalid certificate expiration period"), optarg);				 days_till_exp_warn = atoi(optarg);
+                               usage2 (_("Invalid certificate expiration period"), optarg);
+			    days_till_exp_warn = atoi (optarg);
 			    *temp=',';
 			    temp++;
 			    if (!is_intnonneg (temp))
@@ -643,7 +644,7 @@ print_help (void)
 	printf (UT_IPv46);
 
 	printf (" %s\n", "-E, --escape");
-  printf ("    %s\n", _("Can use \\n, \\r, \\t or \\ in send or quit string. Must come before send or quit option"));
+  printf ("    %s\n", _("Can use \\n, \\r, \\t or \\\\ in send or quit string. Must come before send or quit option"));
   printf ("    %s\n", _("Default: nothing added to send, \\r\\n added to end of quit"));
   printf (" %s\n", "-s, --send=STRING");
   printf ("    %s\n", _("String to send to the server"));
