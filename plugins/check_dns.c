@@ -127,7 +127,7 @@ main (int argc, char **argv)
     if (verbose)
       puts(chld_out.line[i]);
 
-    if (strstr (chld_out.line[i], ".in-addr.arpa")) {
+    if (strcasestr (chld_out.line[i], ".in-addr.arpa")) {
       if ((temp_buffer = strstr (chld_out.line[i], "name = ")))
         addresses[n_addresses++] = strdup (temp_buffer + 7);
       else {
@@ -395,10 +395,10 @@ process_arguments (int argc, char **argv)
     switch (c) {
     case 'h': /* help */
       print_help ();
-      exit (STATE_OK);
+      exit (STATE_UNKNOWN);
     case 'V': /* version */
       print_revision (progname, NP_VERSION);
-      exit (STATE_OK);
+      exit (STATE_UNKNOWN);
     case 'v': /* version */
       verbose = TRUE;
       break;

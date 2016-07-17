@@ -125,7 +125,7 @@ main (int argc, char **argv)
         if (verbose)
           printf ("%s\n", chld_out.line[i]);
 
-        if (strstr (chld_out.line[i], (expected_address == NULL ? query_address : expected_address)) != NULL) {
+        if (strcasestr (chld_out.line[i], (expected_address == NULL ? query_address : expected_address)) != NULL) {
           msg = chld_out.line[i];
           result = STATE_OK;
 
@@ -223,10 +223,10 @@ process_arguments (int argc, char **argv)
     switch (c) {
     case 'h':                 /* help */
       print_help ();
-      exit (STATE_OK);
+      exit (STATE_UNKNOWN);
     case 'V':                 /* version */
       print_revision (progname, NP_VERSION);
-      exit (STATE_OK);
+      exit (STATE_UNKNOWN);
     case 'H':                 /* hostname */
       host_or_die(optarg);
       dns_server = optarg;
